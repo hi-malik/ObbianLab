@@ -1,0 +1,10 @@
+{
+  "recorded_at": "2026-10-14T06:26:19.763294+00:00",
+  "status": "passed",
+  "failure": "local database container restart",
+  "all_service_readiness_seconds": 2.218,
+  "post_recovery_smoke": "passed",
+  "post_recovery_replay": "passed",
+  "unbalanced_ledger_transactions": 0,
+  "limitation": "Single-node Docker recovery, not AWS failover, restore RPO or regional RTO"
+}

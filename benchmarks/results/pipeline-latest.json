@@ -1,0 +1,38 @@
+{
+  "measuredAt": "2026-10-14T05:56:00.161Z",
+  "status": "passed",
+  "path": "PostgreSQL outbox -> Kafka (12 partitions) -> PostgreSQL reporting",
+  "records": 12000,
+  "duplicateDeliveries": 1200,
+  "concurrency": 8,
+  "elapsedSeconds": 69.197,
+  "recordsPerSecond": 173.42,
+  "equivalentRecordsPerDay": 14983366,
+  "targetRecordsPerDay": 2000000,
+  "meetsAverageTarget": true,
+  "aggregateRows": [
+    {
+      "currency": "INR",
+      "requested": "0",
+      "completed": "0",
+      "cancelled": "0",
+      "gross": "20000000",
+      "refunded": "5000000"
+    },
+    {
+      "currency": "XXX",
+      "requested": "4000",
+      "completed": "2000",
+      "cancelled": "2000",
+      "gross": "0",
+      "refunded": "0"
+    }
+  ],
+  "assertions": [
+    "all six event facts accounted for",
+    "exact totals",
+    "10% replay does not double count",
+    "no dead letters"
+  ],
+  "limits": "Single local Redpanda broker and PostgreSQL; short synthetic run, not a 24-hour durability or AWS capacity certification."
+}

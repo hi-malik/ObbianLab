@@ -1,0 +1,19 @@
+{
+  "workload": "POST /availability/check",
+  "recorded_at": "2026-10-14T06:23:52.830505+00:00",
+  "environment": "Linux-6.17.0-40-generic-x86_64-with-glibc2.39",
+  "limitation": "Small seeded local dataset; HTTP success does not imply available capacity. Not an AWS or fleet-size capacity test.",
+  "requests": 500,
+  "concurrency": 25,
+  "success": 500,
+  "errors": 0,
+  "duration_seconds": 2.504,
+  "requests_per_second": 199.67,
+  "latency_ms": {
+    "mean": 122.14,
+    "p50": 106.94,
+    "p95": 167.71,
+    "p99": 569.45,
+    "max": 626.45
+  }
+}

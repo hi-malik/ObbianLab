@@ -1,0 +1,10 @@
+FROM postgres:16-alpine
+RUN apk upgrade --no-cache && apk add --no-cache python3 && rm -f /usr/local/bin/gosu
+COPY migrations /migrations
+COPY migrate.sh /usr/local/bin/migrate
+COPY psql-env.py /usr/local/bin/psql-env
+COPY provision-runtime.sql /provision-runtime.sql
+COPY provision-runtime.sh /usr/local/bin/provision-runtime
+RUN chmod 0555 /usr/local/bin/migrate /usr/local/bin/provision-runtime /usr/local/bin/psql-env
+USER 70
+ENTRYPOINT ["/usr/local/bin/migrate"]

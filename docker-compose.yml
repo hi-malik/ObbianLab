@@ -1,0 +1,216 @@
+name: obbian-assessment
+
+x-database-url: &database-url postgres://obbian:obbian@database:5432/obbian
+
+services:
+  database:
+    build: ./db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: obbian
+      POSTGRES_USER: obbian
+      POSTGRES_PASSWORD: obbian
+    volumes:
+      - database-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U obbian -d obbian"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build:
+      context: ./db
+      dockerfile: Dockerfile.migrations
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://obbian:obbian@database:5432/obbian
+    restart: "no"
+
+  seed:
+    build: ./db
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      PGPASSWORD: obbian
+    volumes:
+      - ./db/seed.sql:/seed.sql:ro
+    entrypoint: ["psql", "-h", "database", "-U", "obbian", "-d", "obbian", "-v", "ON_ERROR_STOP=1", "-f", "/seed.sql"]
+    restart: "no"
+
+  redis:
+    image: redis:7.4.2-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  redpanda:
+    image: redpandadata/redpanda:v24.3.6
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=768M
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr=internal://redpanda:9092,external://localhost:19092
+    ports:
+      - "127.0.0.1:19092:19092"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 5s
+      timeout: 4s
+      retries: 30
+
+  kafka-init:
+    image: redpandadata/redpanda:v24.3.6
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-ec"]
+    command:
+      - >-
+        rpk topic describe domain-events.v1 --brokers redpanda:9092 >/dev/null 2>&1 || rpk topic create domain-events.v1 --brokers redpanda:9092 --partitions 12;
+        rpk topic describe domain-events.retry.v1 --brokers redpanda:9092 >/dev/null 2>&1 || rpk topic create domain-events.retry.v1 --brokers redpanda:9092 --partitions 12;
+        rpk topic describe domain-events.dlq.v1 --brokers redpanda:9092 >/dev/null 2>&1 || rpk topic create domain-events.dlq.v1 --brokers redpanda:9092 --partitions 3
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: *database-url
+      PORT: 3001
+      DB_POOL_SIZE: 20
+      CORS_ORIGINS: http://localhost:3000
+      AUTH_MODE: demo
+      INTERNAL_SERVICE_TOKEN: local-internal-token
+      AUTH_SIGNING_SECRET: local-development-only-secret-32-characters
+      WS_DEMO_TOKEN: local-ws-token
+      SANDBOX_WEBHOOK_SECRET: local-webhook-secret
+      PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-sandbox}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_CONNECT_DESTINATIONS: ${STRIPE_CONNECT_DESTINATIONS:-}
+      SERVICE_PRICES_JSON: ${SERVICE_PRICES_JSON:-}
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:3001:3001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  allocation:
+    build: ./services/allocation
+    environment:
+      DATABASE_URL: *database-url
+      MAX_ALLOCATION_ATTEMPTS: 5
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/allocation", "--healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  pipeline:
+    build:
+      context: .
+      dockerfile: services/pipeline/Dockerfile
+    environment:
+      DATABASE_URL: *database-url
+      KAFKA_BROKERS: redpanda:9092
+      CONSUMER_CONCURRENCY: 8
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8090/health/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  ai:
+    build: ./services/ai
+    environment:
+      DATABASE_URL: *database-url
+      REDIS_URL: redis://redis:6379/0
+      BOOKING_API_URL: http://api:3001
+      INTERNAL_SERVICE_TOKEN: local-internal-token
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4.1-mini}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://api.openai.com}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      ASR_BASE_URL: ${ASR_BASE_URL:-https://api.openai.com}
+      ASR_API_KEY: ${ASR_API_KEY:-}
+      ASR_MODEL: ${ASR_MODEL:-whisper-1}
+      AUTH_MODE: demo
+      AI_DEMO_TOKEN: local-ai-token
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      AI_SERVICE_URL: http://ai:8000
+      BOOKING_API_URL: http://api:3001
+      AUTH_MODE: demo
+      AI_DEMO_TOKEN: local-ai-token
+      DEMO_TENANT_ID: 11111111-1111-4111-8111-111111111111
+      DEMO_CUSTOMER_ID: 22222222-2222-4222-8222-222222222222
+    depends_on:
+      ai:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:3000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/session"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  database-data:
+  redis-data:

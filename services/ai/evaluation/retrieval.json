@@ -1,0 +1,17 @@
+{
+  "documents": [
+    {"key": "electric", "title": "Electrical safety", "text": "Before resetting a tripped circuit breaker, isolate the electricity supply and inspect the circuit. Only a qualified electrician should repair damaged wiring."},
+    {"key": "plumbing", "title": "Plumbing response", "text": "For a leaking pipe, close the main water valve. A plumber replaces damaged pipe joints and checks water pressure."},
+    {"key": "refund", "title": "Refund processing", "text": "Refunds return the captured payment to the original payment method. Payment reconciliation compares gateway records against ledger entries."},
+    {"key": "allocation", "title": "Professional allocation", "text": "Professional allocation checks service radius, availability and arrival time. Booking offers expire after the acceptance timeout and then the system reassigns the booking."},
+    {"key": "hindi", "title": "सफाई सेवा", "text": "सफाई सेवा के लिए ग्राहक को पता और समय बताना चाहिए। सफाई कर्मचारी उपलब्ध होने पर बुकिंग की पुष्टि के लिए ग्राहक से अनुमति ली जाती है।"}
+  ],
+  "queries": [
+    {"question": "How should a tripped circuit breaker be reset?", "expected": "electric"},
+    {"question": "What should I close for a leaking pipe?", "expected": "plumbing"},
+    {"question": "How does payment reconciliation compare ledger entries?", "expected": "refund"},
+    {"question": "What happens when booking offers expire?", "expected": "allocation"},
+    {"question": "सफाई सेवा बुकिंग के लिए क्या चाहिए?", "expected": "hindi"},
+    {"question": "Professional service radius and arrival time", "expected": "allocation"}
+  ]
+}

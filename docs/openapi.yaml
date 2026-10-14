@@ -1,0 +1,498 @@
+openapi: 3.1.0
+info:
+  title: Obbian booking platform API
+  version: 1.1.0
+  description: Public booking/payment endpoints and assistant-facing validation endpoints.
+servers:
+- url: http://localhost:3001
+security:
+- BearerIdentity: []
+paths:
+  /categories/{slug}:
+    get:
+      summary: Resolve an active category for the caller's tenant
+      parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Category
+        '404':
+          description: Not found
+  /availability/check:
+    post:
+      summary: Check current eligible capacity without reserving it
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Availability'
+      responses:
+        '200':
+          description: Availability snapshot
+  /bookings:
+    post:
+      summary: Request a booking
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBooking'
+      responses:
+        '201':
+          description: Booking accepted for allocation
+        '409':
+          description: Conflicting reuse of idempotency key
+  /bookings/{id}:
+    get:
+      summary: Get a booking visible to the customer or assigned professional
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Booking
+        '404':
+          description: Not found
+  /professionals/me/offers:
+    get:
+      summary: List unexpired offers for the authenticated professional
+      responses:
+        '200':
+          description: Pending offers
+  /professionals/me/presence:
+    post:
+      summary: Refresh the authenticated professional's availability and current position
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfessionalPresence'
+      responses:
+        '201':
+          description: Presence updated
+        '404':
+          description: Active professional profile not found
+  /offers/{id}/accept:
+    post:
+      summary: Atomically accept an offer
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Booking confirmed
+        '409':
+          description: Expired or overlapping assignment
+  /offers/{id}/reject:
+    post:
+      summary: Reject and queue the booking for reassignment
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Reassignment queued
+  /bookings/{id}/locations:
+    post:
+      summary: Record an assigned professional's location
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Location'
+      responses:
+        '201':
+          description: Location recorded
+        '409':
+          description: Duplicate or unauthorized state
+  /bookings/{id}/cancel:
+    post:
+      summary: Cancel a customer-owned non-terminal booking and release its assignment
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Booking cancelled
+        '409':
+          description: Terminal booking
+  /payments:
+    post:
+      summary: Create an idempotent sandbox payment intent
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Payment intent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Payment'
+  /payments/{id}:
+    get:
+      summary: Get a customer-owned payment
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Payment state
+  /payments/reconciliation/report:
+    get:
+      summary: Compare processed sandbox gateway events, payment state and ledger
+        postings
+      responses:
+        '200':
+          description: Finance-only mismatch report
+        '401':
+          description: Finance role required
+  /webhooks/sandbox:
+    post:
+      security:
+      - WebhookSignature: []
+      summary: Receive a signed, replay-safe payment event
+      responses:
+        '201':
+          description: Accepted
+          with duplicate flag: null
+        '401':
+          description: Invalid signature
+  /settlements:
+    post:
+      summary: Finance reserves unpaid earnings and transfers to a configured Stripe
+        test connected account, or runs the explicit local simulator
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '201':
+          description: Paid settlement and balanced ledger posting
+        '409':
+          description: No payable balance or key conflict
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Settlement'
+  /bookings/{id}/start:
+    post:
+      summary: Assigned professional starts a confirmed booking
+      parameters:
+      - &id001
+        $ref: '#/components/parameters/Id'
+      responses:
+        '201':
+          description: Successful result
+        '401':
+          description: Authentication or role rejected
+        '404':
+          description: Resource not visible
+        '409':
+          description: Invalid transition or conflicting state
+  /bookings/{id}/complete:
+    post:
+      summary: Assigned professional completes a booking and releases its assignment
+      parameters:
+      - *id001
+      responses:
+        '201':
+          description: Successful result
+        '401':
+          description: Authentication or role rejected
+        '404':
+          description: Resource not visible
+        '409':
+          description: Invalid transition or conflicting state
+  /bookings/{id}/locations/latest:
+    get:
+      summary: Authorized customer/professional reads latest committed location after
+        reconnect
+      parameters:
+      - *id001
+      responses:
+        '200':
+          description: Successful result
+        '401':
+          description: Authentication or role rejected
+        '404':
+          description: Resource not visible
+        '409':
+          description: Invalid transition or conflicting state
+  /payments/{id}/sandbox-confirm:
+    post:
+      summary: Owner confirms an actual Stripe test PaymentIntent using pm_card_visa
+      parameters:
+      - *id001
+      responses:
+        '201':
+          description: Successful result
+        '401':
+          description: Authentication or role rejected
+        '404':
+          description: Resource not visible
+        '409':
+          description: Invalid transition or conflicting state
+  /payments/{id}/reconcile:
+    post:
+      summary: Finance retrieves independent Stripe state and recovers missed capture/refund
+        facts
+      parameters:
+      - *id001
+      responses:
+        '201':
+          description: Successful result
+        '401':
+          description: Authentication or role rejected
+        '404':
+          description: Resource not visible
+        '409':
+          description: Invalid transition or conflicting state
+  /payments/{id}/refunds:
+    post:
+      summary: Finance reserves and invokes an idempotent Stripe test refund
+      parameters:
+      - *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Refund'
+      responses:
+        '201':
+          description: Refund operation
+        '409':
+          description: Conflicting or excessive refund
+        '503':
+          description: Outcome pending; retry same key
+  /payments/webhooks/{eventId}/replay:
+    post:
+      summary: Finance retries a durably retained payment webhook
+      parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '201':
+          description: Recovery result
+        '401':
+          description: Finance required
+  /webhooks/stripe:
+    post:
+      security:
+      - StripeSignature: []
+      summary: Receive signed Stripe test snapshot events; public frontend forwards
+        raw bytes from /api/payments/webhook
+      responses:
+        '201':
+          description: Durable accepted, deferred, duplicate or ignored result
+        '400':
+          description: Invalid/live gateway event
+        '401':
+          description: Signature or timestamp invalid
+  /payments/quote/{bookingId}:
+    get:
+      summary: Create or read immutable server-priced quote for an owned booking
+      parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '200':
+          description: Server quote, or explicitly labelled unpriced local simulation
+        '404':
+          description: Booking not visible
+        '503':
+          description: Missing or invalid strict pricing policy
+  /settlements/{id}:
+    get:
+      summary: Finance reads submitted/paid settlement and its verified gateway reference
+      parameters:
+      - $ref: '#/components/parameters/Id'
+      responses:
+        '200':
+          description: Settlement state
+        '404':
+          description: Not found
+        '401':
+          description: Finance required
+components:
+  securitySchemes:
+    WebhookSignature:
+      type: apiKey
+      in: header
+      name: x-sandbox-signature
+    BearerIdentity:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: HS256 assessment token with sub, tenantId, aud=obbian and exp.
+        Roles and tenant membership resolve from database. Trusted proxies use a separate
+        service token plus x-actor-id and x-tenant-id. Header-only identities require
+        explicit local AUTH_MODE=demo.
+    StripeSignature:
+      type: apiKey
+      in: header
+      name: stripe-signature
+      description: Raw-body HMAC with t=timestamp and v1 signatures; five minute tolerance;
+        test events only.
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        maxLength: 200
+  schemas:
+    Availability:
+      type: object
+      required:
+      - categoryId
+      - latitude
+      - longitude
+      - scheduledFor
+      properties:
+        categoryId:
+          type: string
+          format: uuid
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        scheduledFor:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+          minimum: 5
+          default: 60
+        maxEtaSeconds:
+          type: integer
+          minimum: 120
+          maximum: 14400
+          default: 1800
+    CreateBooking:
+      allOf:
+      - $ref: '#/components/schemas/Availability'
+      - type: object
+        required:
+        - address
+        properties:
+          address:
+            type: string
+            maxLength: 500
+    Location:
+      type: object
+      required:
+      - latitude
+      - longitude
+      - recordedAt
+      properties:
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        recordedAt:
+          type: string
+          format: date-time
+    ProfessionalPresence:
+      type: object
+      required:
+      - latitude
+      - longitude
+      - status
+      properties:
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        status:
+          type: string
+          enum:
+          - available
+          - busy
+          - offline
+    Payment:
+      type: object
+      additionalProperties: false
+      required:
+      - bookingId
+      - amountMinor
+      - currency
+      properties:
+        bookingId:
+          type: string
+          format: uuid
+        amountMinor:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+        currency:
+          type: string
+          pattern: ^[a-zA-Z]{3}$
+    Refund:
+      type: object
+      additionalProperties: false
+      required:
+      - amountMinor
+      properties:
+        amountMinor:
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+    Settlement:
+      type: object
+      additionalProperties: false
+      required:
+      - professionalId
+      - currency
+      - periodStart
+      - periodEnd
+      properties:
+        professionalId:
+          type: string
+          format: uuid
+        currency:
+          type: string
+          pattern: ^[a-zA-Z]{3}$
+        periodStart:
+          type: string
+          format: date-time
+        periodEnd:
+          type: string
+          format: date-time

@@ -1,0 +1,43 @@
+{
+  "recordedAt": "2026-10-14T06:40:20.105974+00:00",
+  "scanner": "Trivy",
+  "scope": "Six application/migration runtime images; HIGH and CRITICAL with available fixes, ignore-unfixed=true. Does not claim no lower-severity or unfixable findings, or scan of local infrastructure images.",
+  "results": [
+    {
+      "image": "obbian-assessment-ai:latest",
+      "imageId": "sha256:e15bf7c865993aaac3a610b42aaa53e2387bcba71271c77b6a6d4349129e002d",
+      "fixableHighCritical": 0,
+      "status": "passed"
+    },
+    {
+      "image": "obbian-assessment-allocation:latest",
+      "imageId": "sha256:77992f176ee3702c1fea92260063a807671113256e11a4f3daa99eab693e81cb",
+      "fixableHighCritical": 0,
+      "status": "passed"
+    },
+    {
+      "image": "obbian-assessment-api:latest",
+      "imageId": "sha256:fd42e92cecbc2e1d27609a3f87b1ebbfc3f61e3603c25f8c3b8072d43ae27d1b",
+      "fixableHighCritical": 0,
+      "status": "passed"
+    },
+    {
+      "image": "obbian-assessment-migrate:latest",
+      "imageId": "sha256:9929300ae37790b999f0185fa8ba89ce8166359b2401699f4df58d80c9e8ada8",
+      "fixableHighCritical": 0,
+      "status": "passed"
+    },
+    {
+      "image": "obbian-assessment-pipeline:latest",
+      "imageId": "sha256:869aa57fe99e6be17e43ce884f7181579fa073bc35359fb1177e3539c4948ce0",
+      "fixableHighCritical": 0,
+      "status": "passed"
+    },
+    {
+      "image": "obbian-assessment-web:latest",
+      "imageId": "sha256:c3fdc44c292aa2b4d0703b1116b90ad4ff49e5149ec72d2035294cf2a1fe07ae",
+      "fixableHighCritical": 0,
+      "status": "passed"
+    }
+  ]
+}

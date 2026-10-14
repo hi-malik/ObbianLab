@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-10-14T06:23:02.565706+00:00",
+  "runtime": "go1.27.2 linux/amd64",
+  "image": "golang:1.27.2-bookworm",
+  "dependency": "github.com/jackc/pgx/v5 v5.11.0",
+  "checks": [
+    {
+      "command": "go test -race ./...",
+      "status": "passed"
+    },
+    {
+      "command": "go vet ./...",
+      "status": "passed"
+    },
+    {
+      "command": "go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...",
+      "status": "passed",
+      "output": "No vulnerabilities found."
+    }
+  ],
+  "releaseSource": "https://go.dev/dl/?mode=json",
+  "limitation": "Does not claim a container OS package scan or AWS runtime execution."
+}

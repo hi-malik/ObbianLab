@@ -1,0 +1,15 @@
+{
+  "status": "passed",
+  "tenantId": "0a9ddd38-2c2a-4585-b43c-427e69f40433",
+  "settlementId": "8ef75886-feb5-4a57-97a5-a17287cb9568",
+  "remoteTransferCalls": 1,
+  "checks": [
+    "durable pending reservation after post-transfer crash",
+    "restart recovers existing gateway transfer",
+    "one reserve and one final ledger post",
+    "retry/new key cannot transfer twice",
+    "pending reservation blocks competing key",
+    "persisted destination survives configuration change"
+  ],
+  "externalGateway": "simulated transport; real PostgreSQL"
+}

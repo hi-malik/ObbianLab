@@ -1,0 +1,18 @@
+{
+  "status": "passed",
+  "tenantId": "55efd4a6-da0b-4409-b61b-344265f03561",
+  "checks": [
+    "forged roles and cross-tenant identity rejected",
+    "ETA budget filters otherwise eligible professionals",
+    "booking idempotency key cannot disclose another actor booking response",
+    "rejection automatically reassigned to next eligible professional",
+    "signed actor tracking, committed cross-process notification, write authorization and reconnect snapshot",
+    "concurrent new payment keys produce one charge intent per booking",
+    "concurrent duplicate capture, delayed capture, out-of-order refund recovery, refund business-id dedup and exact full reversal",
+    "booking completion releases assignment",
+    "historical settlement cutoff and concurrent new keys cannot pay earnings twice",
+    "reconciliation agrees after retries and duplicate business events",
+    "database rejects empty ledger transactions and mismatched account currencies",
+    "expired offer automatically reassigned; cancellation cannot be revived by late acceptance"
+  ]
+}

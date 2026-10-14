@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: database-migration
+  namespace: obbian
+  labels:
+    app.kubernetes.io/component: migration
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      containers:
+      - name: migrate
+        image: obbian/migrations:local
+        envFrom:
+        - secretRef:
+            name: migration-secrets
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+    metadata:
+      labels:
+        app: migration

@@ -1,0 +1,109 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny, namespace: obbian }
+spec: { podSelector: {}, policyTypes: [Ingress, Egress] }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: dns, namespace: obbian }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
+          podSelector: { matchLabels: { k8s-app: kube-dns } }
+      ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: database, namespace: obbian }
+spec:
+  podSelector: { matchExpressions: [{ key: app, operator: In, values: [api, allocation, pipeline, ai, migration] }] }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ ipBlock: { cidr: 10.42.0.0/16 } }]
+      ports: [{ protocol: TCP, port: 5432 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: ai-backends, namespace: obbian }
+spec:
+  podSelector: { matchLabels: { app: ai } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: api } } }]
+      ports: [{ protocol: TCP, port: 3001 }]
+    - to: [{ ipBlock: { cidr: 10.42.0.0/16 } }]
+      ports: [{ protocol: TCP, port: 6379 }]
+    # Hosted LLM/embedding/ASR APIs; production egress proxy can restrict domains.
+    - to: [{ ipBlock: { cidr: 0.0.0.0/0, except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16] } }]
+      ports: [{ protocol: TCP, port: 443 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: pipeline-aws, namespace: obbian }
+spec:
+  podSelector: { matchLabels: { app: pipeline } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ ipBlock: { cidr: 10.42.0.0/16 } }]
+      ports: [{ protocol: TCP, port: 9098 }]
+    - to: [{ ipBlock: { cidr: 169.254.170.23/32 } }]
+      ports: [{ protocol: TCP, port: 80 }]
+    - to: [{ ipBlock: { cidr: 0.0.0.0/0 } }]
+      ports: [{ protocol: TCP, port: 443 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: web-backends, namespace: obbian }
+spec:
+  podSelector: { matchLabels: { app: web } }
+  policyTypes: [Egress]
+  egress:
+    - to: [{ podSelector: { matchLabels: { app: ai } } }]
+      ports: [{ protocol: TCP, port: 8000 }]
+    - to: [{ podSelector: { matchLabels: { app: api } } }]
+      ports: [{ protocol: TCP, port: 3001 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: api-ingress, namespace: obbian }
+spec:
+  podSelector: { matchLabels: { app: api } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ podSelector: { matchExpressions: [{ key: app, operator: In, values: [ai, web] }] } }]
+      ports: [{ protocol: TCP, port: 3001 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: ai-ingress, namespace: obbian }
+spec:
+  podSelector: { matchLabels: { app: ai } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app: web } } }]
+      ports: [{ protocol: TCP, port: 8000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: load-balancer-web, namespace: obbian }
+spec:
+  podSelector: { matchLabels: { app: web } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ ipBlock: { cidr: 10.42.0.0/16 } }]
+      ports: [{ protocol: TCP, port: 3000 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: api-payment-provider, namespace: obbian }
+spec:
+  podSelector: { matchLabels: { app: api } }
+  policyTypes: [Egress]
+  egress:
+    # Stripe test payments/refunds/Connect transfers use the fixed HTTPS gateway.
+    # Restrict domains through an egress proxy if tighter destination policy is needed.
+    - to: [{ ipBlock: { cidr: 0.0.0.0/0, except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16] } }]
+      ports: [{ protocol: TCP, port: 443 }]

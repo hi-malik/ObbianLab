@@ -1,0 +1,30 @@
+{
+  "name": "@obbian/pipeline",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "pretypecheck": "npm run build -w @obbian/contracts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pretest": "npm run build -w @obbian/contracts",
+    "test": "vitest run",
+    "test:integration": "vitest run test/integration.test.ts",
+    "replay": "tsx src/replay.ts"
+  },
+  "dependencies": {
+    "@obbian/contracts": "1.0.0",
+    "aws-msk-iam-sasl-signer-js": "1.0.3",
+    "kafkajs": "^2.2.4",
+    "pg": "^8.13.3",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@types/pg": "^8.11.11",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^5.0.4"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "obbian-service-platform",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web",
+    "services/pipeline",
+    "packages/contracts"
+  ],
+  "scripts": {
+    "build": "npm run build -w @obbian/contracts && npm run build -w @obbian/api && npm run build -w @obbian/web && npm run build -w @obbian/pipeline",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "dev:api": "npm run start:dev -w @obbian/api",
+    "dev:web": "npm run dev -w @obbian/web",
+    "dev:pipeline": "npm run dev -w @obbian/pipeline"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

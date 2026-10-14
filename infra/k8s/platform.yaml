@@ -1,0 +1,634 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: obbian
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: application
+  namespace: obbian
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pipeline
+  namespace: obbian
+automountServiceAccountToken: false
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: platform-config
+  namespace: obbian
+data:
+  BOOKING_API_URL: http://api:3001
+  AI_SERVICE_URL: http://ai:8000
+  CONSUMER_CONCURRENCY: '8'
+  AUTH_MODE: strict
+  KAFKA_AUTH_MODE: iam
+  AWS_REGION: ap-south-1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: obbian
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: api
+      containers:
+      - name: api
+        image: obbian/api:local
+        ports:
+        - name: http
+          containerPort: 3001
+        envFrom:
+        - configMapRef:
+            name: platform-config
+        - secretRef:
+            name: api-secrets
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          periodSeconds: 5
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        startupProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          periodSeconds: 2
+          failureThreshold: 30
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: '1'
+            memory: 768Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1000
+      volumes:
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: obbian
+spec:
+  selector:
+    app: api
+  ports:
+  - name: http
+    port: 3001
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: allocation
+  namespace: obbian
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: allocation
+  template:
+    metadata:
+      labels:
+        app: allocation
+    spec:
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      containers:
+      - name: allocation
+        image: obbian/allocation:local
+        ports:
+        - name: http
+          containerPort: 8080
+        envFrom:
+        - secretRef:
+            name: allocation-secrets
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 200m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 512Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 65532
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: allocation
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pipeline
+  namespace: obbian
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: pipeline
+  template:
+    metadata:
+      labels:
+        app: pipeline
+    spec:
+      serviceAccountName: pipeline
+      automountServiceAccountToken: false
+      containers:
+      - name: pipeline
+        image: obbian/pipeline:local
+        envFrom:
+        - configMapRef:
+            name: platform-config
+        - secretRef:
+            name: pipeline-secrets
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 300m
+            memory: 256Mi
+          limits:
+            cpu: '2'
+            memory: 1Gi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        ports:
+        - name: http
+          containerPort: 8090
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1000
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: pipeline
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai
+  namespace: obbian
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: ai
+  template:
+    metadata:
+      labels:
+        app: ai
+    spec:
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      containers:
+      - name: ai
+        image: obbian/ai:local
+        ports:
+        - name: http
+          containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: platform-config
+        - secretRef:
+            name: ai-secrets
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 10
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: '2'
+            memory: 2Gi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 10001
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: ai
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai
+  namespace: obbian
+spec:
+  selector:
+    app: ai
+  ports:
+  - name: http
+    port: 8000
+    targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  namespace: obbian
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: web
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      serviceAccountName: application
+      automountServiceAccountToken: false
+      containers:
+      - name: web
+        image: obbian/web:local
+        ports:
+        - name: http
+          containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: platform-config
+        - secretRef:
+            name: web-secrets
+        readinessProbe:
+          httpGet:
+            path: /api/session
+            port: http
+          periodSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /api/session
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1000
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: web
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  namespace: obbian
+spec:
+  selector:
+    app: web
+  ports:
+  - name: http
+    port: 80
+    targetPort: http
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+  namespace: obbian
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: api
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+  namespace: obbian
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 3
+  maxReplicas: 20
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 65
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai
+  namespace: obbian
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai
+  minReplicas: 2
+  maxReplicas: 12
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: allocation
+  namespace: obbian
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: allocation
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: pipeline
+  namespace: obbian
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: pipeline
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ai
+  namespace: obbian
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ai
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web
+  namespace: obbian
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: web
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: allocation
+  namespace: obbian
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: allocation
+  minReplicas: 3
+  maxReplicas: 12
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 65
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: pipeline
+  namespace: obbian
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pipeline
+  minReplicas: 3
+  maxReplicas: 12
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 65
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web
+  namespace: obbian
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: web
+  minReplicas: 2
+  maxReplicas: 10
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 65

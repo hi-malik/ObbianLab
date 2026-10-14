@@ -1,0 +1,10 @@
+{
+  "scenario": 3,
+  "mode": "offline deterministic intent; live HTTP + auth + PostgreSQL state and audit",
+  "workload": "new conversation / electrician / address clarification; sequential; 5 warmups excluded",
+  "samples": 50,
+  "latency_ms_p50": 14.016,
+  "latency_ms_p95": 28.645,
+  "latency_ms_max": 32.652,
+  "limitations": "Local Docker host, no LLM, no ASR, no create-booking call; not a load or scalability result"
+}

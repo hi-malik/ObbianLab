@@ -1,0 +1,119 @@
+name: ci
+on:
+  workflow_call:
+  pull_request:
+  push: { branches: [main] }
+
+permissions:
+  contents: read
+
+jobs:
+  typescript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --audit-level=high
+
+  python:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: services/ai } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+      - run: pytest -q
+      - run: pip install pip-audit && pip-audit -r requirements.txt
+
+  go:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: services/allocation } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.27.2", cache-dependency-path: services/allocation/go.sum }
+      - run: go test -race ./...
+      - run: go vet ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  images:
+    needs: [typescript, python, go]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - { name: api, file: apps/api/Dockerfile, context: . }
+          - { name: web, file: apps/web/Dockerfile, context: . }
+          - { name: pipeline, file: services/pipeline/Dockerfile, context: . }
+          - { name: ai, file: services/ai/Dockerfile, context: services/ai }
+          - { name: allocation, file: services/allocation/Dockerfile, context: services/allocation }
+          - { name: migrations, file: db/Dockerfile.migrations, context: db }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: false
+          load: true
+          platforms: linux/amd64
+          tags: obbian/${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+      - uses: aquasecurity/trivy-action@0.30.0
+        with:
+          image-ref: obbian/${{ matrix.name }}:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: infra/terraform } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Kubernetes resources against schemas
+        run: docker run --rm -v "${{ github.workspace }}/infra/k8s:/manifests:ro" ghcr.io/yannh/kubeconform:v0.6.7 -strict -summary /manifests
+
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python -m pip install PyYAML
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: docker compose up --build -d --wait --wait-timeout 240
+      - run: python3 scripts/smoke.py
+      - run: python3 scripts/concurrency_check.py
+      - run: python3 scripts/pipeline_replay_check.py
+      - run: python3 scripts/security_check.py
+      - run: python3 scripts/web_auth_check.py
+      - run: python3 scripts/migration_check.py
+      - run: python3 scripts/deploy_check.py
+      - run: python3 scripts/database_tests.py
+      - run: python3 scripts/booking_payment_integrity_check.py
+      - run: docker compose exec -T api node < scripts/stripe_transfer_recovery_check.cjs
+      - name: Diagnostics
+        if: failure()
+        run: docker compose logs --tail=100
+      - name: Cleanup
+        if: always()
+        run: docker compose down -v
