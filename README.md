@@ -9,6 +9,8 @@ Start with the [strict assessment verdict](./docs/strict-review.md), [architectu
 
 An additional [Oracle Always Free deployment profile](./docs/oracle-free-deployment.md) runs the stack on one VM with strict sign-in and explicitly offline AI/simulated professionals and payments. It does not replace the assessment's AWS requirement.
 
+**Live assessment demo:** https://obbianlab-161-118-169-229.sslip.io/ — requires an issued customer token. See the [deployment verification and operations record](./docs/live-deployment.md). The Oracle deployment passed 11 internal workflow checks and 9 public HTTPS checks on 14 October 2026. GitHub Actions could not start because the GitHub account reported a billing lock; this is not a passing CI run.
+
 ## Run it
 
 ```bash
@@ -58,7 +60,7 @@ PostgreSQL has PostGIS/pgvector and stores durable workflow state; Redpanda prov
 | Six application/migration runtime image scans | Zero fixable HIGH/CRITICAL findings |
 | Full Compose smoke, booking concurrency and Kafka replay | Pass |
 | Booking/payment regression and Connect crash recovery | 12 and 6 scenario groups pass; provider transport simulated |
-| Database role permissions | 20 assertions pass |
+| Database role permissions | 22 assertions pass |
 | Local database restart | Services ready in 2.218 seconds; subsequent smoke/replay pass |
 
-The [verification record](./docs/verification.md) includes exact scope and commands. The pipeline processed 12,000 mixed events at 173.42 records/second with exact totals and replay deduplication. This is a short local run, not a 24-hour or AWS capacity certification. Live cloud/provider checks remain explicitly pending.
+The [verification record](./docs/verification.md) includes exact scope and commands. The pipeline processed 12,000 mixed events at 173.42 records/second with exact totals and replay deduplication. This is a short local run, not a 24-hour or AWS capacity certification. AWS and credentialed provider checks remain explicitly pending.

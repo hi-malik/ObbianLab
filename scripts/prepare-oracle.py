@@ -14,9 +14,11 @@ import yaml
 
 ROOT=Path(__file__).resolve().parents[1]
 
-def prepare(hostname):
+def prepare(hostname, prebuilt_prefix=None, micro=False):
     if not re.fullmatch(r'[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?',hostname) or '..' in hostname:
         raise ValueError('Provide a valid public DNS hostname')
+    if prebuilt_prefix and not re.fullmatch(r'[a-z0-9][a-z0-9._-]*',prebuilt_prefix):
+        raise ValueError('Provide a local Docker image prefix')
     directory=ROOT/'.deploy'
     directory.mkdir(mode=0o700,exist_ok=True);directory.chmod(0o700)
     secret_file=directory/'secrets.json'
@@ -74,6 +76,25 @@ def prepare(hostname):
     services['demo-professional']={'build':str(ROOT/'services/ai'),'restart':'unless-stopped',
         'command':['python','/demo-professional.py'],'volumes':[str(ROOT/'infra/oracle/demo-professional.py')+':/demo-professional.py:ro'],
         'environment':{'INTERNAL_SERVICE_TOKEN':credentials['INTERNAL_SERVICE_TOKEN']},'depends_on':{'api':{'condition':'service_healthy'}}}
+    if prebuilt_prefix:
+        aliases={'grants':'migrate','seed':'database','demo-professional':'ai'}
+        for name,service in services.items():
+            if 'build' in service:
+                service.pop('build')
+                service['image']=prebuilt_prefix+'-'+aliases.get(name,name)+':latest'
+                service['pull_policy']='never'
+    if micro:
+        # A1 is preferred. E2 Micro supports only a low-traffic assessment demo.
+        services['database']['command']=['postgres','-c','shared_buffers=32MB','-c','max_connections=60','-c','work_mem=2MB']
+        services['redis']['command']=[value.replace('256mb','128mb') for value in services['redis']['command']]
+        services['redpanda']['command']=[value.replace('--memory=768M','--memory=384M') for value in services['redpanda']['command']]
+        services['api']['environment']['DB_POOL_SIZE']=5
+        services['pipeline']['environment']['CONSUMER_CONCURRENCY']=2
+        for name in ['api','web','pipeline']:
+            services[name]['environment']['NODE_OPTIONS']='--max-old-space-size=192'
+        for service in services.values():
+            if 'healthcheck' in service:
+                service['healthcheck'].update(interval='15s',timeout='10s',retries=30)
     path=directory/'compose.yaml';path.write_text(yaml.safe_dump(config,sort_keys=False));path.chmod(0o600)
     encode=lambda value:base64.urlsafe_b64encode(json.dumps(value,separators=(',',':')).encode()).decode().rstrip('=')
     body=encode({'alg':'HS256','typ':'JWT'})+'.'+encode({'sub':'22222222-2222-4222-8222-222222222222',
@@ -84,4 +105,7 @@ def prepare(hostname):
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--hostname',required=True)
-    prepare(parser.parse_args().hostname)
+    parser.add_argument('--prebuilt-prefix',help='Use already loaded PREFIX-SERVICE:latest images instead of building on the VM')
+    parser.add_argument('--micro',action='store_true',help='Reduce memory and concurrency for an Always Free E2 Micro demo')
+    args=parser.parse_args()
+    prepare(args.hostname,args.prebuilt_prefix,args.micro)

@@ -4,6 +4,19 @@ This profile runs the complete Docker stack on one Ubuntu 24.04 ARM VM. Use only
 
 This is an authenticated assessment demo with **offline English/Hindi parsing, hash-vector retrieval, a synthetic professional GPS heartbeat and simulated payments**. It is not the AWS deployment required by scenario 6. Actual voice/hosted LLM/Stripe evidence remains separate. The public interface labels its offline demo status.
 
+### Capacity fallback: E2 Micro
+
+If A1 is unavailable, the Always Free `VM.Standard.E2.1.Micro` with Ubuntu 24.04 AMD64 can run a low-traffic assessment demo. Its 1 GB RAM and fractional CPU are unsuitable for the throughput benchmark. Provision a 100 GB boot disk and 4 GB swap, build images on a development machine, then transfer them over SSH with `docker save`/`docker load`. Do not build the full stack on this small VM.
+
+For images named `PREFIX-api:latest`, `PREFIX-web:latest`, `PREFIX-ai:latest`, `PREFIX-allocation:latest`, `PREFIX-pipeline:latest`, `PREFIX-migrate:latest` and `PREFIX-database:latest`, run:
+
+```sh
+python3 scripts/prepare-oracle.py --hostname YOUR_PUBLIC_HOSTNAME --prebuilt-prefix PREFIX --micro
+docker compose -f .deploy/compose.yaml up --no-build -d --wait --wait-timeout 600
+```
+
+The profile uses those already loaded images, reduces the broker's memory allocation and worker concurrency, and allows more time for health checks. Use the same flags when regenerating configuration or refreshing a customer token. Keep a record of the source commit and image IDs, and re-run the deployment checks after every update. Swap prevents some memory failures but increases latency; migrate to A1 when capacity becomes available.
+
 ## Network and setup
 
 Use a public IPv4 address, allow TCP 80/443 to the VM for Caddy HTTPS, and restrict SSH TCP 22 to the operator's current IP. PostgreSQL, Redis, Kafka, API, allocator and AI have no published host ports. A synthetic customer needs an issued signed token to use the web interface; knowing seeded user IDs is insufficient. Runtime database users are separate, with table/column grants. Store deployment secrets only in the private `.deploy/` directory, excluded from Git and Docker build contexts.
