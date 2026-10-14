@@ -38,12 +38,15 @@ async def lifespan(app: FastAPI):
     demo = os.getenv("AUTH_MODE") == "demo"
     llm_key = os.getenv("LLM_API_KEY")
     embedding_key = os.getenv("EMBEDDING_API_KEY", llm_key or "")
+    offline = os.getenv("AI_PROVIDER_MODE") == "offline"
     if not demo:
-        required = [name for name in ("AI_SERVICE_TOKEN", "INTERNAL_SERVICE_TOKEN", "LLM_API_KEY") if not os.getenv(name)]
-        if required or not embedding_key:
+        required = [name for name in ("AI_SERVICE_TOKEN", "INTERNAL_SERVICE_TOKEN") if len(os.getenv(name, "")) < 32]
+        if required or (not offline and (not llm_key or not embedding_key)):
             await redis.aclose()
             await pool.close()
-            raise RuntimeError("Production requires AI_SERVICE_TOKEN, INTERNAL_SERVICE_TOKEN, LLM_API_KEY and embedding credentials")
+            raise RuntimeError("Strict authentication requires strong service tokens; hosted mode also requires LLM and embedding credentials")
+    if offline:
+        llm_key, embedding_key = None, ""
     llm_base = os.getenv("LLM_BASE_URL", "https://api.openai.com")
     llm_model = os.getenv("LLM_MODEL", "gpt-4.1-mini")
     intent_model = StructuredLlmIntentModel(llm_base, llm_key, llm_model) if llm_key else DeterministicIntentModel()
@@ -52,7 +55,7 @@ async def lifespan(app: FastAPI):
     embeddings = HostedEmbeddings(os.getenv("EMBEDDING_BASE_URL", llm_base), embedding_key,
                                   os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")) if embedding_key else None
     answer_model = HostedAnswerModel(llm_base, llm_key, llm_model) if llm_key else None
-    asr_key = os.getenv("ASR_API_KEY", llm_key or "")
+    asr_key = "" if offline else os.getenv("ASR_API_KEY", llm_key or "")
     transcriber = HostedTranscriber(os.getenv("ASR_BASE_URL", llm_base), asr_key,
                                    os.getenv("ASR_MODEL", "whisper-1")) if asr_key else None
     app.state.workflow = BookingWorkflow(intent_model, backend, PostgresAuditSink(pool), PostgresStateStore(pool))

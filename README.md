@@ -7,6 +7,8 @@ This repository implements the six assessment scenarios as one event-driven serv
 
 Start with the [strict assessment verdict](./docs/strict-review.md), [architecture](./docs/architecture.md) and [verification record](./docs/verification.md). Use the [runbook](./docs/runbook.md) for a demonstration and the [AWS deployment instructions](./docs/aws-deployment.md) for account setup and release.
 
+An additional [Oracle Always Free deployment profile](./docs/oracle-free-deployment.md) runs the stack on one VM with strict sign-in and explicitly offline AI/simulated professionals and payments. It does not replace the assessment's AWS requirement.
+
 ## Run it
 
 ```bash

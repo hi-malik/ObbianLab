@@ -22,9 +22,10 @@ type ChatLine = { from: 'you' | 'assistant'; text: string };
 export default function Home() {
   const [authenticated, setAuthenticated] = useState(false);
   const [demo, setDemo] = useState(false);
+  const [offline, setOffline] = useState(false);
   const [accessToken, setAccessToken] = useState('');
   const [loginError, setLoginError] = useState('');
-  useEffect(() => { fetch('/api/session').then(r => r.json()).then(s => { setAuthenticated(s.authenticated); setDemo(s.demo); }).catch(() => setLoginError('Unable to check your session.')); }, []);
+  useEffect(() => { fetch('/api/session').then(r => r.json()).then(s => { setAuthenticated(s.authenticated); setDemo(s.demo); setOffline(Boolean(s.offline)); }).catch(() => setLoginError('Unable to check your session.')); }, []);
   const [message, setMessage] = useState('');
   const [conversationId, setConversationId] = useState<string>();
   const [stage, setStage] = useState('new request');
@@ -103,7 +104,7 @@ export default function Home() {
     <main>
       <header>
         <a className="brand" href="#">obbian<span>lab</span></a>
-        <div className="environment"><i />{demo ? 'local demonstration' : 'service platform'}</div>
+        <div className="environment"><i />{demo ? 'local demonstration' : offline ? 'assessment demo · offline AI' : 'service platform'}</div>
       </header>
       <section className="hero">
         <div>
@@ -146,7 +147,7 @@ export default function Home() {
           </div>
         </form>
         <div className="voice-input"><label htmlFor="audio">Or upload a voice request</label><input id="audio" type="file" accept="audio/wav,audio/mpeg,audio/mp4,audio/webm,audio/ogg" disabled={!authenticated || busy} onChange={e => { void uploadAudio(e.target.files?.[0]); e.target.value = ''; }} />
-          {demo && <small>Local mode uses an English/Hindi parser. Voice requires configured transcription credentials.</small>}
+          {(demo || offline) && <small>Demo uses an English/Hindi parser. Professionals and payments are simulated; voice transcription is not configured.</small>}
         </div>
       </section>
       <section className="knowledge-panel">

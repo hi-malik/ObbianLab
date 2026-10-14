@@ -60,6 +60,8 @@ try {
       await denied(pool,'SELECT * FROM ledger_entries LIMIT 0');
     }
     if (key === 'AI') {
+      await pool.query('SELECT id,tenant_id,roles FROM app_users LIMIT 0'); assertions++;
+      await denied(pool,'SELECT external_subject FROM app_users LIMIT 0');
       await pool.query('SELECT * FROM knowledge_documents LIMIT 0'); assertions++;
       await denied(pool,'UPDATE bookings SET status=status');
       await denied(pool,'SELECT * FROM ledger_entries LIMIT 0');

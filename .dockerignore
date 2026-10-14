@@ -8,3 +8,6 @@ work
 .git
 .terraform
 benchmark-results
+.deploy
+.env
+**/.env

@@ -21,3 +21,4 @@ benchmark-results/*.json
 !benchmark-results/recovery-local.json
 !benchmark-results/security-summary.json
 *.tfplan
+.deploy/

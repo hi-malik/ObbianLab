@@ -43,6 +43,7 @@ BEGIN
   EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON processing_failures TO %I',pipeline_role);
   EXECUTE format('GRANT USAGE ON SEQUENCE dead_letters_id_seq TO %I',pipeline_role);
 
+  EXECUTE format('GRANT SELECT(id,tenant_id,roles) ON app_users TO %I',ai_role);
   EXECUTE format('GRANT SELECT,INSERT,UPDATE,DELETE ON knowledge_documents,knowledge_document_acl,knowledge_chunks TO %I',ai_role);
   EXECUTE format('GRANT SELECT,INSERT,UPDATE ON ai_conversations TO %I',ai_role);
   EXECUTE format('GRANT INSERT ON ai_audit_events TO %I',ai_role);

@@ -107,6 +107,8 @@ Likely bottlenecks are provider latency/rate limits, PDF parsing CPU, ingestion 
 
 ## Remaining acceptance limitations
 
+The subsequent free-cloud deployment profile adds `AI_PROVIDER_MODE=offline` independently of authentication. This explicitly selects deterministic models without paid provider keys while keeping strict identity, DB roles and Redis admission checks enabled. Strict service tokens must be at least 32 characters. Hosted mode remains the default for the AWS release; offline mode is labeled as a demonstration in the public UI.
+
 1. Local intent extraction, embeddings and answers intentionally use offline demonstrations until provider secrets are configured. Real multilingual speech, semantic retrieval and generated-answer quality have not been demonstrated live.
 2. The regex instruction scrubber is a supplemental guard, not proof that prompt injection is solved. Stronger boundaries are no action tools in the answer model, identity/ACL enforcement before generation, strict typed outputs, exact citation checks and backend-confirmed booking effects. Semantic support of every generated claim still needs a larger adversarial evaluation.
 3. Scanned PDFs have no OCR path and are rejected if they contain no extractable text. PDF parsing is Linux-container isolated, not a general desktop subprocess implementation.
