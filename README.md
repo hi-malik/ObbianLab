@@ -1,66 +1,73 @@
-# Obbian service platform assessment
+# ObbianLab
 
-Candidate: Himanshu Malik  
-Role: Lead Fullstack Developer — AI System & Architecture
+A service booking platform for rides and home services. Customers can request a professional through the booking API or chat interface. The backend handles nearby professional allocation, booking confirmation, payments, and event processing. A document search service provides answers with source citations.
 
-This repository implements the six assessment scenarios as one event-driven service platform. A strict review on 14 October 2026 found and repaired material authorization, accounting, retry, AI workflow and deployment defects. The corrected application is running and verified locally. **Full assessment acceptance remains pending AWS deployment and credentialed AI/audio/Stripe demonstrations.**
+**[Live demo](https://obbianlab-161-118-169-229.sslip.io/)** — sign in with an issued customer access token.
 
-Start with the [strict assessment verdict](./docs/strict-review.md), [architecture](./docs/architecture.md) and [verification record](./docs/verification.md). Use the [runbook](./docs/runbook.md) for a demonstration and the [AWS deployment instructions](./docs/aws-deployment.md) for account setup and release.
+## Project structure
 
-An additional [Oracle Always Free deployment profile](./docs/oracle-free-deployment.md) runs the stack on one VM with strict sign-in and explicitly offline AI/simulated professionals and payments. It does not replace the assessment's AWS requirement.
+| Directory | Purpose |
+| --- | --- |
+| `apps/web` | Next.js interface for booking and document search |
+| `apps/api` | NestJS APIs for bookings, tracking, pricing, payments, and settlements |
+| `services/allocation` | Go worker for geospatial matching, offers, timeouts, and reassignment |
+| `services/pipeline` | Kafka event processing, deduplication, retries, dead letters, and reporting |
+| `services/ai` | FastAPI service for booking conversations and document retrieval |
+| `packages/contracts` | Shared TypeScript schemas and event contracts |
+| `db` | PostgreSQL migrations, seed data, and runtime permissions |
+| `infra` | Docker, Oracle, AWS Terraform, and Kubernetes configuration |
+| `scripts` | Setup, integration checks, and deployment utilities |
 
-**Live assessment demo:** https://obbianlab-161-118-169-229.sslip.io/ — requires an issued customer token. See the [deployment verification and operations record](./docs/live-deployment.md). The Oracle deployment passed 11 internal workflow checks and 9 public HTTPS checks on 14 October 2026. GitHub Actions could not start because the GitHub account reported a billing lock; this is not a passing CI run.
+PostgreSQL stores bookings, workflow state, and financial ledgers. PostGIS supports location queries, and pgvector stores document embeddings. Redis handles shared request limits. Redpanda provides the Kafka-compatible event broker.
 
-## Run it
+## Local setup
+
+Install Docker with Compose and allow at least 6 GB of memory for the local stack.
+
+```bash
+git clone https://github.com/hi-malik/ObbianLab.git
+cd ObbianLab
+docker compose up --build -d --wait --wait-timeout 240
+```
+
+Open [localhost:3000](http://localhost:3000). The first build can take a few minutes. The `migrate`, `seed`, and `kafka-init` containers run once and should exit with code 0.
+
+The default local configuration uses demo authentication, offline English/Hindi parsing, and simulated payments. Application ports bind to localhost; do not expose this configuration publicly. See [.env.example](.env.example) for provider settings.
+
+## Tests
+
+For TypeScript checks, install Node.js 22 or later:
 
 ```bash
 npm ci
-docker compose up --build -d --wait --wait-timeout 240
+npm run typecheck
+npm test
+```
+
+With the Docker stack running and Python 3.12 installed:
+
+```bash
 python3 scripts/smoke.py
 python3 scripts/concurrency_check.py
 python3 scripts/pipeline_replay_check.py
+python3 scripts/security_check.py
 ```
 
-Then open `http://localhost:3000`. The one-shot `migrate`, `seed`, and `kafka-init` containers should exit with status zero. Detailed prerequisites, individual test commands, failure drills, and recovery notes are in the runbook.
+The [runbook](docs/runbook.md) covers Python and Go tests, database checks, and failure recovery. Recorded results and benchmark scope are in [verification](docs/verification.md) and [performance](docs/performance.md).
 
-PostgreSQL has PostGIS/pgvector and stores durable workflow state; Redpanda provides the Kafka API. Redis provides shared admission limits in strict mode. Compose explicitly selects loopback-only demo authentication, a signed payment simulator, offline English/Hindi intent parsing, hash embeddings and extractive answers. Hosted model/audio and Stripe test adapters require credentials. Never expose demo mode publicly.
+## Deployment
 
-## Scenario map
+The live demo runs on an Oracle Always Free VM with signed-token authentication and HTTPS. Database and backend service ports are private. See the [Oracle setup guide](docs/oracle-free-deployment.md) and [deployment record](docs/live-deployment.md) for configuration, access-token renewal, and verification results.
 
-| Scenario | Primary implementation | Important proof |
-| --- | --- | --- |
-| 1. Booking/allocation | `apps/api`, `services/allocation` | offer lease, exclusion constraint, timeout/reassignment, WebSocket events |
-| 2. Data pipeline | `services/pipeline` | inbox dedupe, partitioned work, bounded retry, DLQ, incremental rollups |
-| 3. AI booking agent | `services/ai/app/workflow.py` | typed state machine, allow-listed tools, explicit confirmation, audit trail |
-| 4. Enterprise RAG | `services/ai/app/rag.py` | versioned chunks, ACL filter before ranking, citations, injection screening |
-| 5. Payments | `apps/api/src/payments` | webhook inbox, idempotency keys, immutable double-entry ledger, reconciliation |
-| 6. Cloud/platform | `infra`, `.github/workflows` | least-privilege deployment shape, probes, autoscaling, migration job, rollback |
+The hosted demo uses offline AI, synthetic professional locations, and simulated payments. Voice transcription is not configured. The 1 GB VM is intended for light demo traffic, not production load.
 
-## Review map
+[AWS deployment instructions](docs/aws-deployment.md), Terraform, and Kubernetes manifests are included, but the AWS deployment has not been verified. Hosted LLM, voice, and Stripe test-account integrations also require credentials and separate validation. GitHub Actions is currently blocked by an account billing issue; completed checks are documented separately.
 
-- [Architecture and consistency boundaries](./docs/architecture.md)
-- [Database relationships and invariants](./docs/data-model.md)
-- [OpenAPI contract](./docs/openapi.yaml)
-- [Threat model and local-only shortcuts](./docs/threat-model.md)
-- [Performance method and bottlenecks](./docs/performance.md)
-- [Recorded verification evidence](./docs/verification.md)
-- [Assumptions and honest limitations](./docs/assumptions-and-limitations.md)
-- [AWS, Kubernetes, rollout and recovery](./docs/runbook.md)
-- [Architectural decisions](./docs/adr)
+## Documentation
 
-## Verification recorded on 14 October 2026
-
-| Check | Result |
-| --- | --- |
-| TypeScript and optimized production build | All four workspaces pass |
-| API / contracts / pipeline / web tests, including real database suites | 29 / 14 / 10 / 8 pass |
-| Python workflow and RAG tests, including real database suites | 43 pass |
-| Go race tests, vet and govulncheck | Pass; no known Go vulnerabilities |
-| npm and Python dependency audits | No known vulnerabilities reported |
-| Six application/migration runtime image scans | Zero fixable HIGH/CRITICAL findings |
-| Full Compose smoke, booking concurrency and Kafka replay | Pass |
-| Booking/payment regression and Connect crash recovery | 12 and 6 scenario groups pass; provider transport simulated |
-| Database role permissions | 22 assertions pass |
-| Local database restart | Services ready in 2.218 seconds; subsequent smoke/replay pass |
-
-The [verification record](./docs/verification.md) includes exact scope and commands. The pipeline processed 12,000 mixed events at 173.42 records/second with exact totals and replay deduplication. This is a short local run, not a 24-hour or AWS capacity certification. AWS and credentialed provider checks remain explicitly pending.
+- [Architecture](docs/architecture.md)
+- [Database model](docs/data-model.md)
+- [API specification](docs/openapi.yaml)
+- [Security model](docs/threat-model.md)
+- [Technical decisions](docs/adr)
+- [Assumptions and limitations](docs/assumptions-and-limitations.md)
