@@ -34,6 +34,14 @@ Open [localhost:3000](http://localhost:3000). The first build can take a few min
 
 The default local configuration uses demo authentication, offline English/Hindi parsing, and simulated payments. Application ports bind to localhost; do not expose this configuration publicly. See [.env.example](.env.example) for provider settings.
 
+## Zara AI chat
+
+With hosted AI enabled and `LLM_API_KEY` configured on the AI service, Zara AI uses `LLM_MODEL` (default `gpt-4o-mini`) to answer general questions and handle service requests naturally. Greetings and unsupported services no longer force the booking form. English is the default; an explicit English, Hindi or Hinglish preference persists within the conversation. API keys stay on the server.
+
+Conversation context is stored with the authenticated actor and tenant in PostgreSQL. The model receives up to 20 recent messages, capped at 24,000 characters; older context is dropped. **New chat** starts a fresh conversation. There is no one- or two-question limit, but application request limits, API quota and provider availability still apply. Zara has no web browsing or live-news access. General chat is model-generated and can be wrong; the separate **Knowledge Library** returns document-grounded answers with validated citations.
+
+Bookings still use backend category and availability checks and require a separate explicit confirmation. General questions cannot change booking details. The deterministic **Booking update** card records backend results independently of generated prose. Confirmation and recovery work even when chat generation is unavailable; an uncertain booking outcome must be recovered with `retry` before starting another request. Only electrician, plumber, cleaner and ride are supported booking categories. Offline mode retains the limited booking parser.
+
 ## Tests
 
 For TypeScript checks, install Node.js 22 or later:

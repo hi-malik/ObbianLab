@@ -4,7 +4,7 @@ import { aiHeaders, BodyReadError, getIdentity, readBoundedBody, sameOrigin } fr
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return NextResponse.json({ detail: 'Invalid origin' }, { status: 403 });
   const identity = getIdentity(request);
-  if (!identity) return NextResponse.json({ detail: 'Sign in to request a booking' }, { status: 401 });
+  if (!identity) return NextResponse.json({ detail: 'Sign in to chat with Zara AI' }, { status: 401 });
   try {
     const body = (await readBoundedBody(request, 20000)).toString('utf8');
     const response = await fetch(`${process.env.AI_SERVICE_URL ?? 'http://localhost:8000'}/agent/messages`, {

@@ -75,11 +75,11 @@ FastAPI exposes the complete executable schema at `/openapi.json` and `/docs`.
 
 Provider settings use an OpenAI-compatible API origin **without** a `/v1` suffix:
 
-- `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`: typed intent and grounded generation.
+- `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`: Zara AI conversation, typed booking intent and grounded generation.
 - `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, `EMBEDDING_MODEL`: embeddings with `dimensions=384`; default origin/key may reuse LLM settings.
 - `ASR_BASE_URL`, `ASR_API_KEY`, `ASR_MODEL`: multipart audio transcription; default origin/key may reuse LLM settings.
 
-Defaults are `https://api.openai.com`, `gpt-4.1-mini`, `text-embedding-3-small`, and `whisper-1`. A provider must support the corresponding endpoints and strict JSON schemas; model availability depends on its account. Incompatible vectors, malformed outputs, invented source quotes, and upstream failures are rejected. API requests emit structured request ID, route template, status and duration logs without message bodies, identity tokens, audio, or document content.
+Defaults are `https://api.openai.com`, `gpt-4o-mini`, `text-embedding-3-small`, and `whisper-1`. A provider must support the corresponding endpoints and strict JSON schemas; model availability depends on its account. Incompatible vectors, malformed outputs, invented source quotes, and upstream failures are rejected. API requests emit structured request ID, route template, status and duration logs without message bodies, identity tokens, audio, or document content.
 
 ## Verification and measured performance
 

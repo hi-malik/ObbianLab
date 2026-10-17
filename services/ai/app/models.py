@@ -46,6 +46,11 @@ class IntentResult(BaseModel):
     confidence: float = Field(ge=0, le=1)
 
 
+class ChatTurn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=8000)
+
+
 class ConversationState(BaseModel):
     conversation_id: UUID = Field(default_factory=uuid4)
     tenant_id: UUID
@@ -55,6 +60,8 @@ class ConversationState(BaseModel):
     proposed_at: datetime | None = None
     booking_id: UUID | None = None
     last_error: str | None = None
+    preferred_language: Literal["en", "hi", "hinglish"] = "en"
+    history: list[ChatTurn] = Field(default_factory=list, max_length=20)
 
 
 class AgentMessage(BaseModel):
@@ -68,6 +75,7 @@ class AgentReply(BaseModel):
     message: str
     booking_id: UUID | None = None
     required_fields: list[str] = Field(default_factory=list)
+    booking_update: str | None = None
 
 
 class Identity(BaseModel):

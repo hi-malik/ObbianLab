@@ -1,12 +1,13 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 
 type Reply = {
   conversation_id: string;
   stage: string;
   message: string;
   booking_id?: string;
+  booking_update?: string;
 };
 
 type KnowledgeAnswer = { answer: string; grounded: boolean; citations: { document_id: string; title: string; version: number; chunk: number }[] };
@@ -17,26 +18,36 @@ function errorText(detail: unknown, fallback: string): string {
   return fallback;
 }
 
-type ChatLine = { from: 'you' | 'assistant'; text: string };
+type ChatLine = { from: 'you' | 'assistant'; text: string; bookingUpdate?: string };
+const welcome: ChatLine = { from: 'assistant', text: "Hi, I'm Zara AI. Ask me a question, talk through an idea, or tell me what service you need. I'll ask for your confirmation before creating any booking." };
 
 export default function Home() {
   const [authenticated, setAuthenticated] = useState(false);
   const [demo, setDemo] = useState(false);
   const [offline, setOffline] = useState(false);
+  const [assessment, setAssessment] = useState(false);
   const [accessToken, setAccessToken] = useState('');
   const [loginError, setLoginError] = useState('');
-  useEffect(() => { fetch('/api/session').then(r => r.json()).then(s => { setAuthenticated(s.authenticated); setDemo(s.demo); setOffline(Boolean(s.offline)); }).catch(() => setLoginError('Unable to check your session.')); }, []);
+  useEffect(() => { fetch('/api/session').then(r => r.json()).then(s => { setAuthenticated(s.authenticated); setDemo(s.demo); setOffline(Boolean(s.offline)); setAssessment(Boolean(s.assessment)); }).catch(() => setLoginError('Unable to check your session.')); }, []);
   const [message, setMessage] = useState('');
   const [conversationId, setConversationId] = useState<string>();
   const [stage, setStage] = useState('new request');
-  const [chat, setChat] = useState<ChatLine[]>([
-    { from: 'assistant', text: 'Tell me what you need, where, and when. I will check availability before asking you to confirm.' },
-  ]);
+  const [chat, setChat] = useState<ChatLine[]>([welcome]);
+  const chatBox = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const box = chatBox.current;
+    box?.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+  }, [chat]);
   const [busy, setBusy] = useState(false);
   const [question, setQuestion] = useState('');
   const [knowledge, setKnowledge] = useState<KnowledgeAnswer>();
   const [knowledgeError, setKnowledgeError] = useState('');
   const [searching, setSearching] = useState(false);
+  const bookingPending = ['awaiting confirmation', 'executing', 'failed'].includes(stage);
+  function newChat() {
+    if (busy || bookingPending) return;
+    setConversationId(undefined); setStage('new request'); setMessage(''); setChat([welcome]);
+  }
 
   async function searchKnowledge(event: FormEvent) {
     event.preventDefault(); if (!question.trim() || searching) return;
@@ -69,7 +80,7 @@ export default function Home() {
       const reply = await response.json();
       if (!response.ok) throw new Error(errorText(reply.detail, 'Voice transcription unavailable.'));
       setConversationId(reply.conversation_id); setStage(reply.stage.replaceAll('_', ' '));
-      setChat(current => [...current, { from: 'you', text: `Audio request: ${file.name}` }, { from: 'assistant', text: reply.message }]);
+      setChat(current => [...current, { from: 'you', text: `Audio request: ${file.name}` }, { from: 'assistant', text: reply.message, bookingUpdate: reply.booking_update }]);
     } catch (error) { setChat(current => [...current, { from: 'assistant', text: error instanceof Error ? error.message : 'Voice request failed.' }]); }
     finally { setBusy(false); }
   }
@@ -92,7 +103,7 @@ export default function Home() {
       const reply = body as Reply;
       setConversationId(reply.conversation_id);
       setStage(reply.stage.replaceAll('_', ' '));
-      setChat((current) => [...current, { from: 'assistant', text: reply.message }]);
+      setChat((current) => [...current, { from: 'assistant', text: reply.message, bookingUpdate: reply.booking_update }]);
     } catch (error) {
       setChat((current) => [...current, { from: 'assistant', text: error instanceof Error ? error.message : 'Request failed.' }]);
     } finally {
@@ -104,13 +115,13 @@ export default function Home() {
     <main>
       <header>
         <a className="brand" href="#">obbian<span>lab</span></a>
-        <div className="environment"><i />{demo ? 'local demonstration' : offline ? 'assessment demo · offline AI' : 'service platform'}</div>
+        <div className="environment"><i />{demo ? 'local demonstration' : offline ? 'assessment demo · offline AI' : assessment ? 'assessment demo · hosted AI' : 'service platform'}</div>
       </header>
       <section className="hero">
         <div>
-          <p className="eyebrow">SERVICE CONCIERGE</p>
-          <h1>Book help without<br />the back-and-forth.</h1>
-          <p className="lede">A small interface over the same validated booking workflow used by the public API.</p>
+          <p className="eyebrow">MEET ZARA AI</p>
+          <h1>Let's talk.<br />Let's get it done.</h1>
+          <p className="lede">Ask questions, explore ideas, or book a service with Zara AI. {offline || demo ? 'Offline booking mode is active.' : 'Powered by OpenAI GPT-4o mini.'}</p>
         </div>
         <aside>
           <span>REQUEST STATE</span>
@@ -124,35 +135,37 @@ export default function Home() {
         {loginError && <p role="alert">{loginError}</p>}
       </form>}
       <section className="workspace">
-        <div className="chat" aria-live="polite">
+        <div className="chat-toolbar"><strong>Zara AI</strong><button type="button" onClick={newChat} disabled={busy || bookingPending} title={bookingPending ? 'Resolve the current booking proposal before starting a new chat.' : 'Start a fresh conversation'}>New chat</button></div>
+        <div className="chat" aria-live="polite" ref={chatBox}>
           {chat.map((line, index) => (
             <div className={`line ${line.from}`} key={`${line.from}-${index}`}>
-              <small>{line.from === 'you' ? 'YOU' : 'CONCIERGE'}</small>
+              <small>{line.from === 'you' ? 'YOU' : 'ZARA AI'}</small>
               <p>{line.text}</p>
+              {line.bookingUpdate && <div className="booking-update"><strong>Booking update</strong><p>{line.bookingUpdate}</p></div>}
             </div>
           ))}
         </div>
         <form onSubmit={submit}>
-          <label htmlFor="request">Your request</label>
+          <label htmlFor="request">Message Zara AI</label>
           <div>
             <input
               disabled={!authenticated || busy}
               id="request"
               value={message}
               onChange={(event) => setMessage(event.target.value)}
-              placeholder="Service, address, coordinates and future date (YYYY-MM-DDTHH:mm:ss+05:30)"
+              placeholder="Ask Zara a question or describe what you need…"
               autoComplete="off"
             />
-            <button disabled={busy || !authenticated}>{busy ? 'Checking…' : 'Send'}</button>
+            <button disabled={busy || !authenticated}>{busy ? 'Zara is thinking…' : 'Send'}</button>
           </div>
         </form>
         <div className="voice-input"><label htmlFor="audio">Or upload a voice request</label><input id="audio" type="file" accept="audio/wav,audio/mpeg,audio/mp4,audio/webm,audio/ogg" disabled={!authenticated || busy} onChange={e => { void uploadAudio(e.target.files?.[0]); e.target.value = ''; }} />
-          {(demo || offline) && <small>Demo uses an English/Hindi parser. Professionals and payments are simulated; voice transcription is not configured.</small>}
+          {(demo || offline || assessment) && <small>{demo || offline ? 'Demo uses an English/Hindi parser.' : 'Hosted AI is enabled.'} Professionals and payments are simulated; voice transcription is not configured.</small>}
         </div>
       </section>
       <section className="knowledge-panel">
         <p className="eyebrow">KNOWLEDGE LIBRARY</p><h2>Answers with sources.</h2>
-        <p>Search documents shared with your role. If the evidence is insufficient, the assistant will say so.</p>
+        <p>Search documents shared with your role. This search uses your knowledge library; use Zara's chat above for general questions.</p>
         <form onSubmit={searchKnowledge}><label htmlFor="knowledge-question">Ask a question</label><div>
           <input id="knowledge-question" value={question} onChange={e => setQuestion(e.target.value)} placeholder="What should I check before inspecting a distribution board?" disabled={!authenticated || searching} />
           <button disabled={!authenticated || searching}>{searching ? 'Searching…' : 'Search'}</button>

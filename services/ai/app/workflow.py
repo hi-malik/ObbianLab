@@ -8,8 +8,8 @@ import httpx
 
 from .audit import AuditSink
 from .backend import BookingBackend
-from .intent import IntentModel, is_explicit_confirmation
-from .models import AgentReply, BookingSlots, ConversationState, Identity, Stage
+from .intent import CANCELLATIONS, IntentModel, is_explicit_confirmation
+from .models import AgentReply, BookingSlots, ChatTurn, ConversationState, Identity, IntentResult, Stage
 
 
 from .state import MemoryStateStore, PostgresStateStore
@@ -34,11 +34,12 @@ QUESTIONS = {
 
 
 class BookingWorkflow:
-    def __init__(self, model: IntentModel, backend: BookingBackend, audit: AuditSink, states: Any):
+    def __init__(self, model: IntentModel, backend: BookingBackend, audit: AuditSink, states: Any, chat_model=None):
         self._model = model
         self._backend = backend
         self._audit = audit
         self._states = states
+        self._chat_model = chat_model
 
     async def handle(self, identity: Identity, text: str, conversation_id: UUID | None = None) -> AgentReply:
         key = conversation_id or uuid4()
@@ -51,15 +52,62 @@ class BookingWorkflow:
                 await self._states.put(state)
             if state.tenant_id != identity.tenant_id or state.actor_id != identity.actor_id:
                 raise PermissionError("conversation does not belong to this identity")
+            if self._chat_model:
+                return await self._handle_chat_locked(identity, text, state)
             return await self._handle_locked(identity, text, state)
 
     def _reply(self, state, message, **kwargs):
         return AgentReply(conversation_id=state.conversation_id, stage=state.stage,
                           booking_id=state.booking_id, message=message, **kwargs)
 
-    async def _handle_locked(self, identity: Identity, text: str, state: ConversationState) -> AgentReply:
+    async def _handle_chat_locked(self, identity, text, state):
+        normalized = " ".join(text.strip().split()).casefold()
+        has_draft = any(value is not None for field, value in state.slots.model_dump().items() if field != "duration_minutes")
+        # Confirm/recovery actions bypass the model, including retries after a lost response.
+        critical = state.stage in (Stage.EXECUTING, Stage.FAILED) or (
+            (is_explicit_confirmation(text) or normalized in CANCELLATIONS)
+            and (state.stage != Stage.COLLECTING or has_draft)
+        )
+        intent = None
+        if not critical:
+            try:
+                decision = await self._chat_model.plan(text, state)
+            except Exception as error:
+                await self._audit.write(identity.tenant_id, state.conversation_id, identity.actor_id,
+                                        "chat.failed", response={"error_type": type(error).__name__})
+                reply = self._reply(state, "Zara AI could not reach the AI service reliably. Please try your message again. No booking action was taken.")
+                return await self._remember(state, text, reply)
+            state.preferred_language = decision.preferred_language
+            if decision.route == "chat":
+                # General questions must not modify booking slots or trigger backend tools.
+                return await self._remember(state, text, self._reply(state, decision.reply))
+            intent = IntentResult(intent="book_service", confidence=1,
+                                  language="hi" if state.preferred_language == "hi" else "en",
+                                  slots=decision.slots)
+
+        reply = await self._handle_locked(identity, text, state, intent)
+        if not reply.required_fields:
+            # This receipt is deterministic and remains visible even if generation fails.
+            reply.booking_update = reply.message
+        try:
+            reply.message = await self._chat_model.respond(text, state, reply)
+        except Exception:
+            pass  # Preserve the committed result; prose generation cannot undo a booking.
+        return await self._remember(state, text, reply)
+
+    async def _remember(self, state, text, reply):
+        answer = reply.message + ("\nVerified booking update: " + reply.booking_update if reply.booking_update else "")
+        history = [*state.history, ChatTurn(role="user", content=text),
+                   ChatTurn(role="assistant", content=answer[:8000])][-20:]
+        while len(history) > 2 and sum(len(turn.content) for turn in history) > 24000:
+            history = history[2:]
+        state.history = history
+        await self._states.put(state)
+        return reply
+
+    async def _handle_locked(self, identity: Identity, text: str, state: ConversationState, intent: IntentResult | None = None) -> AgentReply:
         if state.stage in (Stage.COMPLETED, Stage.CANCELLED):
-            return self._reply(state, "This request is already closed. Start a new conversation for another booking.")
+            return self._reply(state, "This request is already closed. Use New chat to start another booking.")
 
         # This path runs before model extraction: models cannot approve actions,
         # change an already submitted payload, or turn an uncertain commit into a cancellation.
@@ -68,7 +116,6 @@ class BookingWorkflow:
                 return await self._execute(identity, state)
             return self._reply(state, "The previous booking outcome is uncertain. Reply ‘retry’ to recover the same request safely. Do not start another booking until its outcome is known.")
 
-        from .intent import CANCELLATIONS
         if " ".join(text.strip().split()).casefold() in CANCELLATIONS:
             state.stage = Stage.CANCELLED
             await self._states.put(state)
@@ -95,7 +142,8 @@ class BookingWorkflow:
             return await self._execute(identity, state)
 
         try:
-            intent = await self._model.extract(text)
+            if intent is None:
+                intent = await self._model.extract(text)
         except Exception as error:
             await self._audit.write(identity.tenant_id, state.conversation_id, identity.actor_id,
                                     "intent.failed", response={"error_type": type(error).__name__})

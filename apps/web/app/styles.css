@@ -19,7 +19,11 @@ aside p { line-height: 1.5; color: #59625c; }
 .line { max-width: 75%; margin-bottom: 24px; }
 .line.you { margin-left: auto; }
 .line small { font-family: monospace; letter-spacing: 1px; color: #667069; }
-.line p { padding: 14px 16px; margin: 6px 0; line-height: 1.45; background: #e7e4db; }
+.line p { padding: 14px 16px; margin: 6px 0; line-height: 1.55; background: #e7e4db; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 18px 30px; border-bottom: 1px solid var(--line); }
+.chat-toolbar button { min-height: 40px; }
+.booking-update { padding: 12px; margin-top: 10px; border: 1px solid #587529; background: #f2f8e8; font-size: 13px; }
+.booking-update p { padding: 0; background: transparent; }
 .line.you p { background: var(--lime); }
 form { padding: 22px 30px 28px; border-top: 1px solid var(--line); }
 form label { display: block; font-family: monospace; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 9px; }

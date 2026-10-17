@@ -21,6 +21,7 @@ from .auth import identity
 from .limits import BodyLimitMiddleware
 from .providers import HostedAnswerModel, HostedEmbeddings, HostedTranscriber
 from .backend import HttpBookingBackend
+from .chat import HostedChatModel
 from .intent import DeterministicIntentModel, StructuredLlmIntentModel
 from .models import AgentMessage, AgentReply, Identity
 from .rag import DocumentInput, QueryAnswer, QueryInput, RagService
@@ -48,8 +49,9 @@ async def lifespan(app: FastAPI):
     if offline:
         llm_key, embedding_key = None, ""
     llm_base = os.getenv("LLM_BASE_URL", "https://api.openai.com")
-    llm_model = os.getenv("LLM_MODEL", "gpt-4.1-mini")
+    llm_model = os.getenv("LLM_MODEL", "gpt-4o-mini")
     intent_model = StructuredLlmIntentModel(llm_base, llm_key, llm_model) if llm_key else DeterministicIntentModel()
+    chat_model = HostedChatModel(llm_base, llm_key, llm_model) if llm_key else None
     backend = HttpBookingBackend(os.getenv("BOOKING_API_URL", "http://localhost:3001"),
                                  os.getenv("INTERNAL_SERVICE_TOKEN", "local-internal-token"))
     embeddings = HostedEmbeddings(os.getenv("EMBEDDING_BASE_URL", llm_base), embedding_key,
@@ -58,13 +60,13 @@ async def lifespan(app: FastAPI):
     asr_key = "" if offline else os.getenv("ASR_API_KEY", llm_key or "")
     transcriber = HostedTranscriber(os.getenv("ASR_BASE_URL", llm_base), asr_key,
                                    os.getenv("ASR_MODEL", "whisper-1")) if asr_key else None
-    app.state.workflow = BookingWorkflow(intent_model, backend, PostgresAuditSink(pool), PostgresStateStore(pool))
+    app.state.workflow = BookingWorkflow(intent_model, backend, PostgresAuditSink(pool), PostgresStateStore(pool), chat_model)
     app.state.rag = RagService(pool, embeddings, answer_model)
     app.state.transcriber = transcriber
     try:
         yield
     finally:
-        for component in (backend, intent_model, embeddings, answer_model, transcriber):
+        for component in (backend, intent_model, chat_model, embeddings, answer_model, transcriber):
             if component and hasattr(component, "aclose"):
                 await component.aclose()
         await redis.aclose()

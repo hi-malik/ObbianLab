@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { BodyReadError, getIdentity, readBoundedBody, sameOrigin, verifyToken } from '../../../lib/session';
 
 export async function GET(request: NextRequest) {
-  return NextResponse.json({ authenticated: Boolean(getIdentity(request)), demo: process.env.AUTH_MODE === 'demo', ...(process.env.AI_PROVIDER_MODE === 'offline' ? { offline: true } : {}) }, { headers: { 'cache-control': 'no-store' } });
+  return NextResponse.json({ authenticated: Boolean(getIdentity(request)), demo: process.env.AUTH_MODE === 'demo', ...(process.env.AI_PROVIDER_MODE === 'offline' ? { offline: true } : {}), ...(process.env.ASSESSMENT_MODE === 'true' ? { assessment: true } : {}) }, { headers: { 'cache-control': 'no-store' } });
 }
 export async function POST(request: NextRequest) {
   if (!sameOrigin(request)) return NextResponse.json({ detail: 'Invalid origin' }, { status: 403 });
